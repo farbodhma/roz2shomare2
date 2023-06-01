@@ -25,17 +25,17 @@ public class GAp implements BranchPredictor {
      */
     public GAp(int BHRSize, int SCSize, int branchInstructionSize) {
         // TODO: complete the constructor
-        this.branchInstructionSize = 0;
+        this.branchInstructionSize = branchInstructionSize;
 
         // Initialize the BHR register with the given size and no default value
-        this.BHR = null;
+        this.BHR = new SIPORegister("BHR" , BHRSize , null;
 
         // Initializing the PAPHT with BranchInstructionSize as PHT Selector and 2^BHRSize row as each PHT entries
         // number and SCSize as block size
-        PAPHT = null;
+        this.PAPHT = new PageHistoryTable((1<<(BHRSize + branchInstructionSize)), SCSize);
 
         // Initialize the SC register
-        SC = null;
+        this.SC = new SIPORegister("SC" , SCSize , null);
     }
 
     /**
@@ -47,7 +47,23 @@ public class GAp implements BranchPredictor {
     @Override
     public BranchResult predict(BranchInstruction branchInstruction) {
         // TODO: complete Task 1
-        return BranchResult.NOT_TAKEN;
+        Bit[] bhrValue = this.BHR.read();
+
+        this.PAPHT.putIfAbsent(bhrValue , getDefaultBlock());
+        this.SC.load(this.PAPHT.get(bhrValue));
+
+        Bit[] result = new Bit[this.BHR.getLength() + this.branchInstructionSize];
+
+        Bit[] branchAddress = branchInstruction.getInstructionAddress();
+
+        System.arraycopy(branchAddress, 0, result, 0, branchAddress.length);
+        System.arraycopy(bhrValue, 0, result, branchAddress.length, bhrValue.length);
+
+        this.PAPHT.putIfAbsent(result , getDefaultBlock());
+        this.SC.load(this.PAPHT.get(result));
+
+        return this.SC.read()[0].equals(Bit.ZERO) ? BranchResult.NOT_TAKEN : BranchResult.TAKEN;
+
     }
 
     /**
@@ -59,6 +75,27 @@ public class GAp implements BranchPredictor {
     @Override
     public void update(BranchInstruction branchInstruction, BranchResult actual) {
         // TODO : complete Task 2
+
+        Bit[] new_value;
+        if (actual.equals(BranchResult.TAKEN))
+            new_value = CombinationalLogic.count(this.SC.read() , true , CountMode.SATURATING);
+        else
+            new_value = CombinationalLogic.count(this.SC.read() , false, CountMode.SATURATING);
+
+        Bit[] bhrValue = this.BHR.read();
+
+        Bit[] result = new Bit[this.BHR.getLength() + this.branchInstructionSize];
+        Bit[] branchAddress = branchInstruction.getInstructionAddress();
+        System.arraycopy(branchAddress, 0, result, 0, branchAddress.length);
+        System.arraycopy(bhrValue, 0, result, branchAddress.length, bhrValue.length);
+        this.PAPHT.put(result , new_value);
+
+        if (actual.equals(BranchResult.TAKEN))
+            this.BHR.insert(Bit.ONE);
+        else
+            this.BHR.insert(Bit.ZERO);
+
+
     }
 
 
